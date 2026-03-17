@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { voiceCommandsTable, signalsTable, junctionsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { ProcessCommandBody } from "@workspace/api-zod";
 import { randomUUID } from "crypto";
 
@@ -141,7 +141,7 @@ router.post("/commands", async (req, res) => {
       await db
         .update(signalsTable)
         .set({ state: signalState as "red" | "green", mode: "manual", lastChangedBy: body.officerId, lastChangedAt: now })
-        .where(eq(signalsTable.junctionId, body.junctionId));
+        .where(and(eq(signalsTable.junctionId, body.junctionId), eq(signalsTable.direction, dir as "north" | "south" | "east" | "west")));
     }
 
     await db.update(junctionsTable).set({ lastUpdated: now }).where(eq(junctionsTable.id, body.junctionId));

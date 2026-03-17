@@ -1,4 +1,4 @@
-import { useGetAnalyticsOverview, useListJunctions, useListAlerts, useGetCongestionData } from "@workspace/api-client-react";
+import { useGetAnalyticsOverview, useListJunctions, useListAlerts, useGetCongestionData, useListSignals } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout";
 import { SignalNode } from "@/components/signal-node";
 import { Activity, AlertTriangle, Users, Cpu, ShieldCheck } from "lucide-react";
@@ -28,6 +28,14 @@ export default function Dashboard() {
   const { data: junctionsData, isLoading: junctionsLoading } = useListJunctions();
   const { data: alertsData, isLoading: alertsLoading } = useListAlerts();
   const { data: congestionData } = useGetCongestionData();
+  const { data: signalsData } = useListSignals();
+
+  // Build a map: junctionId -> direction -> state
+  const signalMap = (signalsData?.signals ?? []).reduce<Record<string, Record<string, "red" | "yellow" | "green">>>((acc, s) => {
+    if (!acc[s.junctionId]) acc[s.junctionId] = {};
+    acc[s.junctionId][s.direction] = s.state as "red" | "yellow" | "green";
+    return acc;
+  }, {});
 
   const junctions = junctionsData?.junctions || [];
   const alerts = alertsData?.alerts || [];
@@ -106,19 +114,19 @@ export default function Dashboard() {
                       </div>
 
                       <div className="flex justify-center items-center py-4 bg-black/30 rounded border border-border/50 mb-4">
-                        {/* Abstract representation of intersection signals */}
+                        {/* Live intersection signals — states driven by DB */}
                         <div className="relative w-24 h-24">
                           <div className="absolute top-0 left-1/2 -translate-x-1/2">
-                            <SignalNode state="red" direction="North" />
+                            <SignalNode state={signalMap[j.id]?.north ?? "red"} direction="North" />
                           </div>
                           <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
-                            <SignalNode state="green" direction="South" />
+                            <SignalNode state={signalMap[j.id]?.south ?? "red"} direction="South" />
                           </div>
                           <div className="absolute left-0 top-1/2 -translate-y-1/2">
-                            <SignalNode state="red" direction="West" />
+                            <SignalNode state={signalMap[j.id]?.west ?? "red"} direction="West" />
                           </div>
                           <div className="absolute right-0 top-1/2 -translate-y-1/2">
-                            <SignalNode state="red" direction="East" />
+                            <SignalNode state={signalMap[j.id]?.east ?? "red"} direction="East" />
                           </div>
                         </div>
                       </div>

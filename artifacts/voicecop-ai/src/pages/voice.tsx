@@ -30,6 +30,7 @@ export default function VoiceInterface() {
 
   const queryClient = useQueryClient();
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const submitCommandRef = useRef<(text: string) => void>(() => {});
   const endOfLogRef = useRef<HTMLDivElement>(null);
 
   const { data: junctionsData } = useListJunctions();
@@ -73,6 +74,7 @@ export default function VoiceInterface() {
     (text: string) => {
       const trimmed = text.trim();
       if (!trimmed || !selectedJunction) return;
+      setStatusMsg("Executing...");
       processCmd.mutate({
         data: {
           officerId: "OP-7742",
@@ -83,9 +85,16 @@ export default function VoiceInterface() {
       });
       setInputText("");
       setLiveTranscript("");
+      // Return to listening status after brief feedback
+      setTimeout(() => setStatusMsg("Listening..."), 1500);
     },
     [selectedJunction, selectedLanguage, processCmd]
   );
+
+  // Keep ref always pointing to latest submitCommand to avoid stale closures in speech handlers
+  useEffect(() => {
+    submitCommandRef.current = submitCommand;
+  }, [submitCommand]);
 
   const stopRecording = useCallback(() => {
     if (recognitionRef.current) {
@@ -142,8 +151,9 @@ export default function VoiceInterface() {
       }
       if (interim) setLiveTranscript(interim);
       if (finalText.trim()) {
-        setLiveTranscript("");
-        setInputText((prev) => (prev ? prev + " " + finalText.trim() : finalText.trim()));
+        setLiveTranscript(finalText.trim());
+        // Auto-submit immediately when speech is finalised
+        submitCommandRef.current(finalText.trim());
       }
     };
 

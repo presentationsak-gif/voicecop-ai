@@ -1,31 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AppLayout } from "@/components/layout";
 import { useProcessCommand, useListCommands, useListJunctions } from "@workspace/api-client-react";
-import { Mic, MicOff, Send, Volume2, History, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { Mic, MicOff, Send, Volume2, History, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-type RecordingState = "idle" | "connecting" | "listening" | "error";
-
-function downsampleBuffer(buffer: Float32Array, inputRate: number, outputRate: number): Int16Array {
-  if (inputRate === outputRate) {
-    const result = new Int16Array(buffer.length);
-    for (let i = 0; i < buffer.length; i++) {
-      result[i] = Math.max(-32768, Math.min(32767, buffer[i] * 32768));
-    }
-    return result;
+// Extend window for SpeechRecognition API
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition | undefined;
+    webkitSpeechRecognition: typeof SpeechRecognition | undefined;
   }
-  const ratio = inputRate / outputRate;
-  const newLength = Math.round(buffer.length / ratio);
-  const result = new Int16Array(newLength);
-  for (let i = 0; i < newLength; i++) {
-    const idx = Math.floor(i * ratio);
-    result[i] = Math.max(-32768, Math.min(32767, buffer[idx] * 32768));
-  }
-  return result;
 }
+
+type RecordingState = "idle" | "listening" | "error";
 
 export default function VoiceInterface() {
   const [inputText, setInputText] = useState("");
@@ -34,13 +24,12 @@ export default function VoiceInterface() {
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
   const [liveTranscript, setLiveTranscript] = useState("");
   const [statusMsg, setStatusMsg] = useState("Awaiting Input");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [aiSpeaking, setAiSpeaking] = useState<string | null>(null);
+  const [hasSpeechAPI, setHasSpeechAPI] = useState(false);
 
   const queryClient = useQueryClient();
-  const wsRef = useRef<WebSocket | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const endOfLogRef = useRef<HTMLDivElement>(null);
 
   const { data: junctionsData } = useListJunctions();
@@ -51,8 +40,8 @@ export default function VoiceInterface() {
         queryClient.invalidateQueries({ queryKey: ["/api/commands"] });
         if (data.aiResponse) {
           setAiSpeaking(data.aiResponse);
-          speak(data.aiResponse);
-          setTimeout(() => setAiSpeaking(null), 6000);
+          speakText(data.aiResponse);
+          setTimeout(() => setAiSpeaking(null), 7000);
         }
       },
     },
@@ -61,129 +50,142 @@ export default function VoiceInterface() {
   const junctions = junctionsData?.junctions ?? [];
   const commands = commandsData?.commands ?? [];
 
+  // Check Speech API availability on mount
+  useEffect(() => {
+    const SpeechRecognitionAPI = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    setHasSpeechAPI(!!SpeechRecognitionAPI);
+  }, []);
+
   useEffect(() => {
     endOfLogRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [commands]);
 
-  const speak = (text: string) => {
+  const speakText = (text: string) => {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 0.95;
-    u.pitch = 0.9;
+    u.pitch = 0.85;
     window.speechSynthesis.speak(u);
   };
 
+  const submitCommand = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || !selectedJunction) return;
+      processCmd.mutate({
+        data: {
+          officerId: "OP-7742",
+          junctionId: selectedJunction,
+          rawText: trimmed,
+          language: selectedLanguage,
+        },
+      });
+      setInputText("");
+      setLiveTranscript("");
+    },
+    [selectedJunction, selectedLanguage, processCmd]
+  );
+
   const stopRecording = useCallback(() => {
-    processorRef.current?.disconnect();
-    processorRef.current = null;
-    audioCtxRef.current?.close();
-    audioCtxRef.current = null;
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ terminate_session: true }));
-      wsRef.current.close();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
     }
-    wsRef.current = null;
     setRecordingState("idle");
     setStatusMsg("Awaiting Input");
+    setLiveTranscript("");
   }, []);
 
-  const startRecording = useCallback(async () => {
+  const startRecording = useCallback(() => {
+    setErrorMsg(null);
+
     if (!selectedJunction) {
-      setStatusMsg("Select a junction first");
+      setErrorMsg("Please select a target junction first.");
       return;
     }
-    setRecordingState("connecting");
-    setStatusMsg("Connecting to AI...");
-    setLiveTranscript("");
+
+    const SpeechRecognitionAPI = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) {
+      setErrorMsg("Speech recognition is not supported in this browser. Please use Chrome or Edge, or type your command below.");
+      return;
+    }
+
+    const langMap: Record<string, string> = {
+      english: "en-US",
+      tamil: "ta-IN",
+      hindi: "hi-IN",
+    };
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = langMap[selectedLanguage] ?? "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => {
+      setRecordingState("listening");
+      setStatusMsg("Listening...");
+    };
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interim = "";
+      let finalText = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalText += result[0].transcript;
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      if (interim) setLiveTranscript(interim);
+      if (finalText.trim()) {
+        setLiveTranscript("");
+        setInputText((prev) => (prev ? prev + " " + finalText.trim() : finalText.trim()));
+      }
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error("Speech recognition error:", event.error);
+      if (event.error === "not-allowed") {
+        setErrorMsg("Microphone access denied. Please allow microphone permissions and try again.");
+      } else if (event.error === "network") {
+        setErrorMsg("Network error. Check your connection and try again.");
+      } else if (event.error === "no-speech") {
+        setStatusMsg("No speech detected. Try again.");
+        setRecordingState("idle");
+        return;
+      } else {
+        setErrorMsg(`Recognition error: ${event.error}`);
+      }
+      setRecordingState("error");
+      recognitionRef.current = null;
+    };
+
+    recognition.onend = () => {
+      // If still in listening state (wasn't manually stopped), restart for continuous recording
+      if (recognitionRef.current) {
+        try {
+          recognition.start();
+        } catch (_) {
+          setRecordingState("idle");
+          setStatusMsg("Awaiting Input");
+        }
+      }
+    };
 
     try {
-      const tokenRes = await fetch(`${BASE}/api/voice/token`, { method: "POST" });
-      if (!tokenRes.ok) throw new Error(`Token error: ${tokenRes.status}`);
-      const { token, wsUrl } = await tokenRes.json() as { token: string; wsUrl: string };
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      streamRef.current = stream;
-
-      const audioCtx = new AudioContext();
-      audioCtxRef.current = audioCtx;
-      const source = audioCtx.createMediaStreamSource(stream);
-      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
-
-      const sampleRate = 16000;
-      const ws = new WebSocket(
-        `${wsUrl}?sample_rate=${sampleRate}&token=${token}&encoding=pcm_s16le`
-      );
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setRecordingState("listening");
-        setStatusMsg("Listening...");
-        source.connect(processor);
-        processor.connect(audioCtx.destination);
-      };
-
-      processor.onaudioprocess = (e) => {
-        if (ws.readyState !== WebSocket.OPEN) return;
-        const input = e.inputBuffer.getChannelData(0);
-        const downsampled = downsampleBuffer(input, audioCtx.sampleRate, sampleRate);
-        const binary = downsampled.buffer;
-        ws.send(binary);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data as string) as {
-            type?: string;
-            transcript?: string;
-            end_of_turn?: boolean;
-            // v2 legacy fields (fallback)
-            message_type?: string;
-            text?: string;
-          };
-          // Universal Streaming v3 format
-          if (msg.type === "Turn") {
-            if (msg.end_of_turn) {
-              setLiveTranscript("");
-              if (msg.transcript) {
-                setInputText((prev) => (prev ? prev + " " + msg.transcript : msg.transcript!));
-              }
-            } else {
-              setLiveTranscript(msg.transcript ?? "");
-            }
-          }
-          // v2 fallback
-          else if (msg.message_type === "PartialTranscript" && msg.text) {
-            setLiveTranscript(msg.text);
-          } else if (msg.message_type === "FinalTranscript" && msg.text) {
-            setLiveTranscript("");
-            setInputText((prev) => (prev ? prev + " " + msg.text : msg.text!));
-          }
-        } catch (_) {}
-      };
-
-      ws.onerror = () => {
-        setRecordingState("error");
-        setStatusMsg("Connection error");
-        stopRecording();
-      };
-
-      ws.onclose = () => {
-        if (recordingState === "listening") stopRecording();
-      };
+      recognition.start();
     } catch (err) {
-      console.error(err);
+      setErrorMsg("Could not start speech recognition. Try again.");
       setRecordingState("error");
-      setStatusMsg(err instanceof Error ? err.message : "Microphone error");
-      stopRecording();
     }
-  }, [selectedJunction, stopRecording, recordingState]);
+  }, [selectedJunction, selectedLanguage]);
 
   const toggleRecording = () => {
-    if (recordingState === "listening" || recordingState === "connecting") {
+    if (recordingState === "listening") {
       stopRecording();
     } else {
       startRecording();
@@ -192,42 +194,43 @@ export default function VoiceInterface() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const text = inputText.trim();
-    if (!text || !selectedJunction) return;
-    processCmd.mutate({
-      data: { officerId: "OP-7742", junctionId: selectedJunction, rawText: text, language: selectedLanguage },
-    });
-    setInputText("");
-    setLiveTranscript("");
     if (recordingState === "listening") stopRecording();
+    submitCommand(inputText);
   };
 
-  const micActive = recordingState === "listening" || recordingState === "connecting";
+  const micActive = recordingState === "listening";
+
+  // Quick-fire sample commands
+  const sampleCommands = [
+    "North signal stop",
+    "East lane go",
+    "Activate emergency corridor",
+    "South signal green",
+    "All signals stop",
+  ];
 
   return (
     <AppLayout>
       <div className="grid lg:grid-cols-2 gap-8 h-full">
 
         {/* Left: Input Panel */}
-        <div className="flex flex-col gap-6 h-full">
-          <div className="tech-border flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-b from-card to-background relative overflow-hidden">
+        <div className="flex flex-col gap-4 h-full">
+          <div className="tech-border flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-card to-background relative overflow-hidden">
             <div className="absolute inset-0 scanline pointer-events-none" />
 
-            <div className="flex items-center gap-2 mb-2">
-              {recordingState === "listening" ? (
-                <Wifi className="w-4 h-4 text-green-400 animate-pulse" />
-              ) : recordingState === "connecting" ? (
-                <Loader2 className="w-4 h-4 text-primary animate-spin" />
-              ) : recordingState === "error" ? (
-                <WifiOff className="w-4 h-4 text-destructive" />
+            {/* API Status Badge */}
+            <div className="flex items-center gap-2 mb-3">
+              {hasSpeechAPI ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
               ) : (
-                <WifiOff className="w-4 h-4 text-muted-foreground" />
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
               )}
               <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                AssemblyAI Real-Time STT
+                {hasSpeechAPI ? "Web Speech API · AssemblyAI NLP" : "Speech API unavailable — use Chrome/Edge"}
               </span>
             </div>
-            <h2 className="font-display text-2xl font-bold uppercase tracking-widest mb-10 glow-text">
+
+            <h2 className="font-display text-2xl font-bold uppercase tracking-widest mb-8 glow-text">
               Voice Command Array
             </h2>
 
@@ -235,39 +238,45 @@ export default function VoiceInterface() {
             <button
               type="button"
               onClick={toggleRecording}
-              className={`relative group w-48 h-48 rounded-full flex items-center justify-center transition-all duration-500 mb-8 ${
+              className={`relative group w-44 h-44 rounded-full flex items-center justify-center transition-all duration-500 mb-6 ${
                 micActive
                   ? "bg-destructive/20 border-2 border-destructive shadow-[0_0_50px_rgba(255,0,0,0.4)]"
                   : "bg-primary/5 border-2 border-primary/30 hover:border-primary hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(0,240,255,0.3)]"
               }`}
             >
-              {recordingState === "listening" && (
+              {micActive && (
                 <>
                   <div className="absolute inset-0 rounded-full border border-destructive animate-ping opacity-75" />
-                  <div className="absolute -inset-4 rounded-full border border-destructive/50 animate-ping opacity-40" style={{ animationDelay: "0.3s" }} />
+                  <div className="absolute -inset-4 rounded-full border border-destructive/40 animate-ping opacity-40" style={{ animationDelay: "0.4s" }} />
                 </>
               )}
-              {recordingState === "connecting" ? (
-                <Loader2 className="w-16 h-16 text-primary animate-spin" />
-              ) : micActive ? (
-                <MicOff className="w-16 h-16 text-destructive" />
+              {micActive ? (
+                <MicOff className="w-14 h-14 text-destructive" />
               ) : (
-                <Mic className="w-16 h-16 text-primary group-hover:scale-110 transition-transform duration-300" />
+                <Mic className="w-14 h-14 text-primary group-hover:scale-110 transition-transform duration-300" />
               )}
             </button>
 
-            {/* Live transcript bubble */}
-            <div className="w-full max-w-md min-h-[56px] bg-black/40 border border-border/50 p-4 rounded text-center mb-4">
+            {/* Status / Live Transcript */}
+            <div className="w-full max-w-md min-h-[52px] bg-black/40 border border-border/50 p-3 rounded text-center mb-3">
               {liveTranscript ? (
                 <p className="font-mono text-sm text-primary animate-pulse leading-relaxed">
                   "{liveTranscript}"
                 </p>
               ) : (
-                <span className={`font-mono text-lg font-bold uppercase ${micActive ? "text-destructive animate-pulse" : "text-primary"}`}>
+                <span className={`font-mono text-base font-bold uppercase ${micActive ? "text-destructive animate-pulse" : "text-primary"}`}>
                   {statusMsg}
                 </span>
               )}
             </div>
+
+            {/* Error message */}
+            {errorMsg && (
+              <div className="w-full max-w-md bg-destructive/10 border border-destructive/30 rounded p-3 flex items-start gap-2 mb-3">
+                <AlertCircle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
+                <p className="font-mono text-xs text-destructive leading-relaxed">{errorMsg}</p>
+              </div>
+            )}
 
             {/* AI earpiece response */}
             {aiSpeaking && (
@@ -279,15 +288,15 @@ export default function VoiceInterface() {
           </div>
 
           {/* Controls */}
-          <div className="tech-border p-6">
+          <div className="tech-border p-5">
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5">
                   <label className="font-mono text-[10px] uppercase tracking-widest text-primary">Target Sector</label>
                   <select
                     value={selectedJunction}
-                    onChange={(e) => setSelectedJunction(e.target.value)}
-                    className="bg-black/50 border border-border/50 text-foreground text-sm font-mono p-3 rounded focus:outline-none focus:border-primary transition-colors"
+                    onChange={(e) => { setSelectedJunction(e.target.value); setErrorMsg(null); }}
+                    className="bg-black/50 border border-border/50 text-foreground text-sm font-mono p-2.5 rounded focus:outline-none focus:border-primary transition-colors"
                     required
                   >
                     <option value="" disabled>Select junction...</option>
@@ -296,33 +305,33 @@ export default function VoiceInterface() {
                     ))}
                   </select>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5">
                   <label className="font-mono text-[10px] uppercase tracking-widest text-primary">Language</label>
                   <select
                     value={selectedLanguage}
                     onChange={(e) => setSelectedLanguage(e.target.value as typeof selectedLanguage)}
-                    className="bg-black/50 border border-border/50 text-foreground text-sm font-mono p-3 rounded focus:outline-none focus:border-primary transition-colors"
+                    className="bg-black/50 border border-border/50 text-foreground text-sm font-mono p-2.5 rounded focus:outline-none focus:border-primary transition-colors"
                   >
-                    <option value="english">English</option>
-                    <option value="tamil">Tamil</option>
-                    <option value="hindi">Hindi</option>
+                    <option value="english">English (en-US)</option>
+                    <option value="tamil">Tamil (ta-IN)</option>
+                    <option value="hindi">Hindi (hi-IN)</option>
                   </select>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5">
                 <label className="font-mono text-[10px] uppercase tracking-widest text-primary">Command Input</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    placeholder={micActive ? "Speak into microphone..." : "Type or use mic..."}
-                    className="flex-1 bg-black/50 border border-border/50 text-foreground text-sm font-mono p-3 rounded focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder={micActive ? "Speak now — transcript appears here..." : "Or type a command..."}
+                    className="flex-1 bg-black/50 border border-border/50 text-foreground text-sm font-mono p-2.5 rounded focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   />
                   <button
                     type="submit"
-                    disabled={processCmd.isPending || !inputText.trim() || !selectedJunction}
+                    disabled={processCmd.isPending || (!inputText.trim() && !liveTranscript) || !selectedJunction}
                     className="bg-primary/20 text-primary border border-primary/50 px-5 rounded hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-mono uppercase text-sm tracking-wider"
                   >
                     {processCmd.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" /> TX</>}
@@ -330,9 +339,22 @@ export default function VoiceInterface() {
                 </div>
               </div>
 
-              <p className="font-mono text-[10px] text-muted-foreground">
-                Try: "North signal stop" · "Activate emergency corridor" · "East lane go"
-              </p>
+              {/* Quick commands */}
+              <div className="flex flex-col gap-1.5">
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Quick Commands</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {sampleCommands.map((cmd) => (
+                    <button
+                      key={cmd}
+                      type="button"
+                      onClick={() => setInputText(cmd)}
+                      className="px-2.5 py-1 bg-black/40 border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/50 text-[10px] font-mono rounded transition-colors"
+                    >
+                      {cmd}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </form>
           </div>
         </div>
@@ -352,7 +374,7 @@ export default function VoiceInterface() {
               </div>
             ) : commands.length === 0 ? (
               <div className="text-center font-mono text-muted-foreground text-xs mt-10">
-                No commands yet. Use the mic or type a command.
+                No commands yet. Click the mic or use Quick Commands below.
               </div>
             ) : (
               [...commands].reverse().map((cmd) => (
@@ -362,12 +384,12 @@ export default function VoiceInterface() {
                       <span className="font-mono text-[9px] text-muted-foreground">OP</span>
                     </div>
                     <div className="flex-1 bg-black/30 border border-border/40 rounded p-3">
-                      <div className="flex justify-between items-center mb-2">
+                      <div className="flex justify-between items-center mb-1.5">
                         <span className="font-mono text-[10px] text-muted-foreground">{cmd.officerName}</span>
                         <span className="font-mono text-[9px] text-muted-foreground">{formatTime(cmd.createdAt)}</span>
                       </div>
                       <p className="font-sans text-sm text-foreground">"{cmd.rawText}"</p>
-                      <div className="mt-2 flex gap-2 flex-wrap">
+                      <div className="mt-2 flex gap-1.5 flex-wrap">
                         <span className="px-2 py-0.5 bg-primary/10 border border-primary/20 text-primary text-[9px] font-mono uppercase rounded">
                           {cmd.intent}
                         </span>
@@ -380,6 +402,9 @@ export default function VoiceInterface() {
                         </span>
                         <span className="px-2 py-0.5 bg-muted/20 border border-border/30 text-muted-foreground text-[9px] font-mono rounded">
                           {Math.round(cmd.confidence * 100)}% conf
+                        </span>
+                        <span className="px-2 py-0.5 bg-muted/20 border border-border/30 text-muted-foreground text-[9px] font-mono rounded uppercase">
+                          {cmd.language}
                         </span>
                       </div>
                     </div>

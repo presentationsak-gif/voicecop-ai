@@ -1,0 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Orbitron', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --color-background: hsl(222 47% 5%);
+  --color-foreground: hsl(210 40% 98%);
+  
+  --color-card: hsl(222 47% 8%);
+  --color-card-foreground: hsl(210 40% 98%);
+  --color-card-border: hsl(215 28% 15%);
+
+  --color-popover: hsl(222 47% 8%);
+  --color-popover-foreground: hsl(210 40% 98%);
+  --color-popover-border: hsl(215 28% 15%);
+
+  /* Neon Cyan */
+  --color-primary: hsl(184 100% 50%);
+  --color-primary-foreground: hsl(222 47% 5%);
+  --color-primary-border: hsl(184 100% 30%);
+
+  --color-secondary: hsl(215 28% 15%);
+  --color-secondary-foreground: hsl(210 40% 98%);
+  --color-secondary-border: hsl(215 28% 20%);
+
+  --color-muted: hsl(215 28% 12%);
+  --color-muted-foreground: hsl(215 20% 65%);
+  --color-muted-border: hsl(215 28% 18%);
+
+  /* Amber/Orange */
+  --color-accent: hsl(35 100% 55%);
+  --color-accent-foreground: hsl(222 47% 5%);
+  --color-accent-border: hsl(35 100% 35%);
+
+  /* Crimson Red */
+  --color-destructive: hsl(350 89% 60%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-destructive-border: hsl(350 89% 40%);
+
+  /* Traffic Signals */
+  --color-signal-red: hsl(350 89% 60%);
+  --color-signal-yellow: hsl(45 93% 55%);
+  --color-signal-green: hsl(142 71% 45%);
+
+  --color-border: hsl(215 28% 17%);
+  --color-input: hsl(215 28% 12%);
+  --color-ring: hsl(184 100% 50%);
+
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+}
+
+:root {
+  --background: 222 47% 5%;
+  --foreground: 210 40% 98%;
+  --card: 222 47% 8%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222 47% 8%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 184 100% 50%;
+  --primary-foreground: 222 47% 5%;
+  --secondary: 215 28% 15%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 215 28% 12%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 35 100% 55%;
+  --accent-foreground: 222 47% 5%;
+  --destructive: 350 89% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 215 28% 17%;
+  --input: 215 28% 12%;
+  --ring: 184 100% 50%;
+  --radius: 0.25rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased selection:bg-primary/30 selection:text-primary;
+    background-image: 
+      linear-gradient(to right, rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-attachment: fixed;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply font-bold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .tech-border {
+    @apply relative border border-primary/20 bg-card/50 backdrop-blur-md overflow-hidden;
+  }
+  .tech-border::before {
+    content: "";
+    @apply absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-primary opacity-50;
+  }
+  .tech-border::after {
+    content: "";
+    @apply absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-primary opacity-50;
+  }
+  .glow-text {
+    text-shadow: 0 0 10px hsla(var(--primary), 0.5);
+  }
+  .glow-text-destructive {
+    text-shadow: 0 0 10px hsla(var(--destructive), 0.5);
+  }
+  .glow-box {
+    box-shadow: 0 0 20px hsla(var(--primary), 0.15), inset 0 0 20px hsla(var(--primary), 0.05);
+  }
+  .scanline {
+    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0, 240, 255, 0.1) 50%, rgba(0, 240, 255, 0.1));
+    background-size: 100% 4px;
+    @apply pointer-events-none absolute inset-0 z-50 opacity-20;
+  }
+}

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "VoiceCop AI - Smart Traffic Management"
+version = "1.0.0"
+id = "artifacts/voicecop-ai"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+localPort = 25815
+name = "web"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/voicecop-ai run dev"
+
+[services.env]
+PORT = "25815"
+BASE_PATH = "/"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/voicecop-ai", "run", "build"]
+publicDir = "artifacts/voicecop-ai/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"

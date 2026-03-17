@@ -1,22 +1,32 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: API specification
+  version: 1.0.0
+  description: VoiceCop AI - Smart Traffic Management System API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: signals
+    description: Traffic signal control operations
+  - name: commands
+    description: Voice command processing
+  - name: incidents
+    description: Emergency and incident management
+  - name: junctions
+    description: Junction and intersection management
+  - name: alerts
+    description: AI alerts and notifications
+  - name: analytics
+    description: Traffic analytics and statistics
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +34,243 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /junctions:
+    get:
+      operationId: listJunctions
+      tags: [junctions]
+      summary: List all monitored junctions
+      responses:
+        "200":
+          description: List of junctions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  junctions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Junction"
+                required: [junctions]
+
+  /junctions/{junctionId}:
+    get:
+      operationId: getJunction
+      tags: [junctions]
+      summary: Get junction details
+      parameters:
+        - name: junctionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Junction details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Junction"
+
+  /signals:
+    get:
+      operationId: listSignals
+      tags: [signals]
+      summary: List all traffic signals
+      responses:
+        "200":
+          description: List of signals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signals:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TrafficSignal"
+                required: [signals]
+
+  /signals/{signalId}:
+    patch:
+      operationId: updateSignal
+      tags: [signals]
+      summary: Update a traffic signal state
+      parameters:
+        - name: signalId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSignalRequest"
+      responses:
+        "200":
+          description: Updated signal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficSignal"
+
+  /commands:
+    get:
+      operationId: listCommands
+      tags: [commands]
+      summary: List recent voice commands
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of recent commands
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  commands:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/VoiceCommand"
+                required: [commands]
+    post:
+      operationId: processCommand
+      tags: [commands]
+      summary: Process a voice command
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcessCommandRequest"
+      responses:
+        "200":
+          description: Command processing result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceCommand"
+
+  /incidents:
+    get:
+      operationId: listIncidents
+      tags: [incidents]
+      summary: List active incidents
+      responses:
+        "200":
+          description: List of incidents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incidents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Incident"
+                required: [incidents]
+    post:
+      operationId: createIncident
+      tags: [incidents]
+      summary: Create a new incident or emergency corridor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIncidentRequest"
+      responses:
+        "201":
+          description: Incident created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Incident"
+
+  /incidents/{incidentId}:
+    patch:
+      operationId: updateIncident
+      tags: [incidents]
+      summary: Update incident status
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateIncidentRequest"
+      responses:
+        "200":
+          description: Updated incident
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Incident"
+
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [alerts]
+      summary: List AI alerts
+      responses:
+        "200":
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alerts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Alert"
+                required: [alerts]
+
+  /analytics/overview:
+    get:
+      operationId: getAnalyticsOverview
+      tags: [analytics]
+      summary: Get traffic analytics overview
+      responses:
+        "200":
+          description: Analytics overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsOverview"
+
+  /analytics/congestion:
+    get:
+      operationId: getCongestionData
+      tags: [analytics]
+      summary: Get congestion data for all junctions
+      responses:
+        "200":
+          description: Congestion data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CongestionDataPoint"
+                required: [data]
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +278,272 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    Junction:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        location:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        status:
+          type: string
+          enum: [normal, congested, emergency, offline]
+        congestionLevel:
+          type: integer
+          minimum: 0
+          maximum: 100
+        activeOfficerId:
+          type: string
+          nullable: true
+        officerName:
+          type: string
+          nullable: true
+        signalIds:
+          type: array
+          items:
+            type: string
+        cameraCount:
+          type: integer
+        vehicleCount:
+          type: integer
+        lastUpdated:
+          type: string
+      required: [id, name, location, latitude, longitude, status, congestionLevel, activeOfficerId, officerName, signalIds, cameraCount, vehicleCount, lastUpdated]
+
+    TrafficSignal:
+      type: object
+      properties:
+        id:
+          type: string
+        junctionId:
+          type: string
+        direction:
+          type: string
+          enum: [north, south, east, west]
+        state:
+          type: string
+          enum: [red, yellow, green]
+        duration:
+          type: integer
+          description: Duration in seconds
+        mode:
+          type: string
+          enum: [automatic, manual, emergency]
+        lastChangedBy:
+          type: string
+          nullable: true
+        lastChangedAt:
+          type: string
+      required: [id, junctionId, direction, state, duration, mode, lastChangedBy, lastChangedAt]
+
+    UpdateSignalRequest:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [red, yellow, green]
+        duration:
+          type: integer
+        mode:
+          type: string
+          enum: [automatic, manual, emergency]
+        officerId:
+          type: string
+      required: [state]
+
+    VoiceCommand:
+      type: object
+      properties:
+        id:
+          type: string
+        officerId:
+          type: string
+        officerName:
+          type: string
+        rawText:
+          type: string
+        intent:
+          type: string
+          enum: [signal_control, emergency_corridor, status_query, alert_dismiss, junction_query, unknown]
+        targetDirection:
+          type: string
+          nullable: true
+          enum: [north, south, east, west, all]
+        targetState:
+          type: string
+          nullable: true
+          enum: [red, green, stop, go]
+        junctionId:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, confirmed, executed, rejected]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        language:
+          type: string
+          enum: [english, tamil, hindi]
+        aiResponse:
+          type: string
+        executedAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, officerId, officerName, rawText, intent, targetDirection, targetState, junctionId, status, confidence, language, aiResponse, executedAt, createdAt]
+
+    ProcessCommandRequest:
+      type: object
+      properties:
+        officerId:
+          type: string
+        junctionId:
+          type: string
+        rawText:
+          type: string
+        language:
+          type: string
+          enum: [english, tamil, hindi]
+          default: english
+      required: [officerId, junctionId, rawText]
+
+    Incident:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [ambulance, fire_engine, police_vehicle, accident, roadblock, emergency_corridor]
+        junctionId:
+          type: string
+        junctionName:
+          type: string
+        detectedBy:
+          type: string
+          enum: [ai_camera, officer_voice, control_room, manual]
+        vehicleDirection:
+          type: string
+          nullable: true
+          enum: [north, south, east, west]
+        distanceMeters:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [detected, alerting, corridor_active, resolved]
+        corridorActive:
+          type: boolean
+        affectedSignals:
+          type: array
+          items:
+            type: string
+        resolvedAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, type, junctionId, junctionName, detectedBy, vehicleDirection, distanceMeters, status, corridorActive, affectedSignals, resolvedAt, createdAt]
+
+    CreateIncidentRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [ambulance, fire_engine, police_vehicle, accident, roadblock, emergency_corridor]
+        junctionId:
+          type: string
+        vehicleDirection:
+          type: string
+          enum: [north, south, east, west]
+        distanceMeters:
+          type: integer
+        detectedBy:
+          type: string
+          enum: [ai_camera, officer_voice, control_room, manual]
+      required: [type, junctionId, detectedBy]
+
+    UpdateIncidentRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [detected, alerting, corridor_active, resolved]
+        corridorActive:
+          type: boolean
+      required: []
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [emergency_vehicle, congestion_high, signal_fault, officer_alert, system_alert]
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        junctionId:
+          type: string
+          nullable: true
+        junctionName:
+          type: string
+          nullable: true
+        message:
+          type: string
+        earpieceMessage:
+          type: string
+          nullable: true
+        acknowledged:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, type, severity, junctionId, junctionName, message, earpieceMessage, acknowledged, createdAt]
+
+    AnalyticsOverview:
+      type: object
+      properties:
+        totalJunctions:
+          type: integer
+        activeOfficers:
+          type: integer
+        emergencyIncidentsToday:
+          type: integer
+        avgResponseTimeSeconds:
+          type: integer
+        vehiclesProcessedToday:
+          type: integer
+        congestionReductionPercent:
+          type: integer
+        commandsExecutedToday:
+          type: integer
+        uptime:
+          type: number
+      required: [totalJunctions, activeOfficers, emergencyIncidentsToday, avgResponseTimeSeconds, vehiclesProcessedToday, congestionReductionPercent, commandsExecutedToday, uptime]
+
+    CongestionDataPoint:
+      type: object
+      properties:
+        junctionId:
+          type: string
+        junctionName:
+          type: string
+        hour:
+          type: integer
+        congestionLevel:
+          type: integer
+        vehicleCount:
+          type: integer
+      required: [junctionId, junctionName, hour, congestionLevel, vehicleCount]

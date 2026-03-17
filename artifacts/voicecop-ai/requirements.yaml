@@ -1,0 +1,21 @@
+packages:
+  "framer-motion": "Required for high-tech UI animations, layout transitions, and the interactive architecture diagram."
+  "recharts": "Required for the dashboard analytics and congestion charting."
+  "clsx": "Utility for conditionally merging Tailwind classes"
+  "tailwind-merge": "Utility for conditionally merging Tailwind classes without conflicts"
+  "date-fns": "For formatting timestamps on alerts and voice commands"
+
+images:
+  - path: "artifacts/voicecop-ai/public/images/hero-bg.png"
+    description: "Dark, moody smart city intersection from a top-down drone perspective at night, cyberpunk aesthetic, neon blue and amber light trails from traffic, highly detailed, photorealistic."
+    aspect_ratio: "16:9"
+  - path: "artifacts/voicecop-ai/public/images/map-grid.png"
+    description: "Abstract high-tech military radar grid background, dark navy blue with faint glowing cyan tactical lines, data nodes, and subtle scanning sweeps. Minimalist UI element."
+    aspect_ratio: "16:9"
+  - path: "artifacts/voicecop-ai/public/images/ai-core.png"
+    description: "A glowing blue artificial intelligence core or glowing processor chip, floating in a dark server room, cybernetic, highly detailed."
+    aspect_ratio: "1:1"
+
+notes:
+  - "The UI relies heavily on @workspace/api-client-react for data. Standard React Query loading/error states are implemented."
+  - "Assuming missing endpoints will return 404 or fail gracefully. The UI will display appropriate error states but keep the layout intact."

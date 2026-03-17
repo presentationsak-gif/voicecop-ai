@@ -6,6 +6,7 @@ import commandsRouter from "./commands";
 import incidentsRouter from "./incidents";
 import alertsRouter from "./alerts";
 import analyticsRouter from "./analytics";
+import voiceRouter from "./voice";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(commandsRouter);
 router.use(incidentsRouter);
 router.use(alertsRouter);
 router.use(analyticsRouter);
+router.use(voiceRouter);
 
 export default router;

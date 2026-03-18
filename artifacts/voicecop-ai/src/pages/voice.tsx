@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AppLayout } from "@/components/layout";
 import { useProcessCommand, useListCommands, useListJunctions } from "@workspace/api-client-react";
-import { Mic, MicOff, Send, Volume2, History, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Mic, MicOff, Send, Volume2, History, Loader2, AlertCircle, CheckCircle2, Bluetooth } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
+import { useEmergencyAlert } from "@/hooks/use-emergency-alert";
+import { EmergencyAlertOverlay } from "@/components/emergency-alert-overlay";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -33,13 +35,23 @@ export default function VoiceInterface() {
   const submitCommandRef = useRef<(text: string) => void>(() => {});
   const endOfLogRef = useRef<HTMLDivElement>(null);
 
+  const { alerts: emergencyAlerts, activeAlert, isPlaying: alertPlaying, triggerAlert, acknowledgeAlert, dismissActiveAlert, testAlert } = useEmergencyAlert();
+
   const { data: junctionsData } = useListJunctions();
   const { data: commandsData, isLoading: cmdsLoading } = useListCommands({ limit: 50 });
   const processCmd = useProcessCommand({
     mutation: {
       onSuccess: (data) => {
         queryClient.invalidateQueries({ queryKey: ["/api/commands"] });
-        if (data.aiResponse) {
+        // Fire emergency alert before speaking AI response
+        if (data.intent === "emergency_corridor" && (data.targetState as any) !== "deactivate") {
+          const junctionName = junctionsData?.junctions?.find((j) => j.id === selectedJunction)?.name ?? "Junction";
+          triggerAlert({
+            junctionName,
+            vehicleType: "general",
+            sirenMode: "siren",
+          });
+        } else if (data.aiResponse) {
           setAiSpeaking(data.aiResponse);
           speakText(data.aiResponse);
           setTimeout(() => setAiSpeaking(null), 7000);

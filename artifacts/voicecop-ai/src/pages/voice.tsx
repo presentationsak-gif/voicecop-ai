@@ -215,6 +215,7 @@ export default function VoiceInterface() {
     "North signal stop",
     "East lane go",
     "Activate emergency corridor",
+    "Deactivate emergency corridor",
     "South signal green",
     "All signals stop",
   ];

@@ -52,7 +52,15 @@ function parseCommand(text: string): {
     }
   }
 
-  if (lower.includes("emergency") || lower.includes("corridor") || lower.includes("ambulance") || lower.includes("clear path")) {
+  if (
+    (lower.includes("deactivate") || lower.includes("cancel corridor") || lower.includes("restore signal") || lower.includes("clear corridor") || lower.includes("end corridor") || lower.includes("normal mode")) &&
+    (lower.includes("emergency") || lower.includes("corridor"))
+  ) {
+    intent = "emergency_corridor";
+    confidence = 0.97;
+    aiResponse = "Emergency corridor deactivated. Restoring all signals to normal automatic operation.";
+    targetState = "deactivate" as any;
+  } else if (lower.includes("emergency") || lower.includes("corridor") || lower.includes("ambulance") || lower.includes("fire") || lower.includes("clear path")) {
     intent = "emergency_corridor";
     confidence = 0.97;
     aiResponse = "Emergency corridor activated. Clearing path for emergency vehicle. All cross-traffic signals set to red.";
@@ -148,13 +156,26 @@ router.post("/commands", async (req, res) => {
   }
 
   if (parsed.intent === "emergency_corridor" && body.junctionId) {
-    await db
-      .update(signalsTable)
-      .set({ state: "red", mode: "emergency", lastChangedBy: body.officerId, lastChangedAt: now })
-      .where(eq(signalsTable.junctionId, body.junctionId));
-    await db.update(junctionsTable)
-      .set({ status: "emergency", lastUpdated: now })
-      .where(eq(junctionsTable.id, body.junctionId));
+    const isDeactivate = (parsed.targetState as any) === "deactivate";
+    if (isDeactivate) {
+      // Restore all signals to green automatic mode
+      await db
+        .update(signalsTable)
+        .set({ state: "green", mode: "automatic", lastChangedBy: body.officerId, lastChangedAt: now })
+        .where(eq(signalsTable.junctionId, body.junctionId));
+      await db.update(junctionsTable)
+        .set({ status: "normal", lastUpdated: now })
+        .where(eq(junctionsTable.id, body.junctionId));
+    } else {
+      // Activate: set all signals to red emergency mode
+      await db
+        .update(signalsTable)
+        .set({ state: "red", mode: "emergency", lastChangedBy: body.officerId, lastChangedAt: now })
+        .where(eq(signalsTable.junctionId, body.junctionId));
+      await db.update(junctionsTable)
+        .set({ status: "emergency", lastUpdated: now })
+        .where(eq(junctionsTable.id, body.junctionId));
+    }
   }
 
   await db

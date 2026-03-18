@@ -8,6 +8,7 @@ import Dashboard from "@/pages/dashboard";
 import VoiceInterface from "@/pages/voice";
 import Incidents from "@/pages/incidents";
 import Architecture from "@/pages/architecture";
+import Surveillance from "@/pages/surveillance";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/voice" component={VoiceInterface} />
       <Route path="/incidents" component={Incidents} />
       <Route path="/architecture" component={Architecture} />
+      <Route path="/surveillance" component={Surveillance} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Mic, LayoutDashboard, AlertTriangle, ShieldAlert, Cpu, Activity, LogOut } from "lucide-react";
+import { Mic, LayoutDashboard, AlertTriangle, ShieldAlert, Cpu, Activity, LogOut, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface LayoutProps {
@@ -13,6 +13,7 @@ export function AppLayout({ children }: LayoutProps) {
   const navItems = [
     { href: "/dashboard", label: "Control Center", icon: LayoutDashboard },
     { href: "/voice", label: "Voice Interface", icon: Mic },
+    { href: "/surveillance", label: "Camera & Sim", icon: Camera },
     { href: "/incidents", label: "Active Incidents", icon: AlertTriangle },
     { href: "/architecture", label: "System Core", icon: Cpu },
   ];
